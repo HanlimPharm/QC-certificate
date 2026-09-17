@@ -26,7 +26,7 @@
     line-height: 1.55;
   }
   .wrap {
-    max-width: 720px;
+    max-width: 1100px;
     margin: 0 auto;
     padding: 56px 24px 96px;
   }
@@ -105,6 +105,32 @@
     font-weight: 600;
     font-size: 12.5px;
   }
+  .field-row {
+    margin-bottom: 16px;
+  }
+  .field-row label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #5b6b7a;
+    margin-bottom: 6px;
+  }
+  .field-row input[type="text"] {
+    width: 100%;
+    max-width: 320px;
+    font: inherit;
+    font-size: 14px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink);
+  }
+  .field-row input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(44,77,120,0.12);
+  }
   .warn-cell { color: var(--bad); font-weight: 600; }
   .or-divider {
     display: flex;
@@ -128,33 +154,36 @@
   }
   table.paste-grid {
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 12.5px;
     width: 100%;
-    min-width: 920px;
+    table-layout: fixed;
   }
   table.paste-grid th {
     background: var(--accent-soft);
     color: var(--accent);
     font-weight: 600;
-    font-size: 12px;
-    padding: 8px 10px;
+    font-size: 11.5px;
+    padding: 7px 8px;
     text-align: left;
     white-space: nowrap;
-    position: sticky;
-    top: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   table.paste-grid td {
-    padding: 7px 10px;
+    padding: 6px 8px;
     border-top: 1px solid var(--line);
     border-left: 1px solid var(--line);
-    min-width: 90px;
-    white-space: nowrap;
+    overflow-wrap: break-word;
     outline: none;
   }
   table.paste-grid td:first-child { border-left: none; }
   table.paste-grid td:focus {
     background: var(--accent-soft);
     box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+  table.paste-grid td.cell-selected {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .msg {
     font-size: 13.5px;
@@ -267,13 +296,17 @@
     <div class="or-divider"><span>또는</span></div>
 
     <div class="grid-wrap">
-      <div class="dz-label" style="text-align:left; margin-bottom:6px;">엑셀에서 대분류~품질부서책임자 10개 열을 선택해 복사(Ctrl+C)한 뒤, 아래 표의 첫 칸을 클릭하고 붙여넣기(Ctrl+V)하세요</div>
+      <div class="dz-label" style="text-align:left; margin-bottom:6px;">엑셀에서 아래와 같은 순서로 9개 열을 선택해 복사(Ctrl+C)한 뒤, 표의 칸을 클릭하고 붙여넣기(Ctrl+V)하세요. 칸을 드래그해서 여러 칸을 한 번에 복사·붙여넣기 할 수 있고, 범위를 선택한 뒤 값을 입력하고 <b>Ctrl+Enter</b>를 누르면 선택한 칸 전체에 같은 값이 채워집니다. <b>Enter</b>는 같은 열의 다음 행으로 이동합니다.</div>
       <div class="grid-scroll">
         <table class="paste-grid" id="pasteGrid">
+          <colgroup>
+            <col style="width:10%"><col style="width:10%"><col style="width:9%"><col style="width:9%">
+            <col style="width:8%"><col style="width:8%"><col style="width:18%"><col style="width:14%"><col style="width:14%">
+          </colgroup>
           <thead>
             <tr>
-              <th>대분류</th><th>소분류</th><th>사번</th><th>이름</th><th>인증번호</th>
-              <th>발행일</th><th>유효기간</th><th>부서</th><th>팀</th><th>품질부서책임자</th>
+              <th>이화학/미생물</th><th>인증항목</th><th>부서</th><th>팀</th><th>사번</th>
+              <th>이름</th><th>인증번호</th><th>발행일</th><th>유효기간</th>
             </tr>
           </thead>
           <tbody id="pasteGridBody"></tbody>
@@ -293,6 +326,10 @@
 
   <div class="card">
     <h2>2. 인증서 생성</h2>
+    <div class="field-row">
+      <label for="chiefInput">품질부서책임자 (전체 인원에 일괄 적용)</label>
+      <input type="text" id="chiefInput" placeholder="예: 박승건" />
+    </div>
     <div class="actions">
       <button class="btn-primary" id="genBtn" disabled>인증서 워드파일 생성</button>
       <a href="#" class="download-link" id="downloadLink" download="인증서.docx">워드파일 다운로드</a>
@@ -569,6 +606,7 @@ const genMsg = document.getElementById('genMsg');
 const downloadLink = document.getElementById('downloadLink');
 const pasteGridBody = document.getElementById('pasteGridBody');
 const addRowBtn = document.getElementById('addRowBtn');
+const chiefInput = document.getElementById('chiefInput');
 const tplBadge = document.getElementById('tplBadge');
 const tplInfo = document.getElementById('tplInfo');
 const tplMsg = document.getElementById('tplMsg');
@@ -719,7 +757,20 @@ uploadCard.addEventListener('drop', (e) => {
   processFile(file);
 });
 
-function renderPeoplePreview(people, sourceLabel) {
+let lastRawPeople = [];
+let lastSourceLabel = '';
+
+function applyChiefOverride(people) {
+  const batch = chiefInput.value.trim();
+  if (!batch) return people;
+  return people.map(p => ({ ...p, chief: batch }));
+}
+
+function renderPeoplePreview(peopleRaw, sourceLabel) {
+  lastRawPeople = peopleRaw;
+  lastSourceLabel = sourceLabel;
+  const people = applyChiefOverride(peopleRaw);
+
   peopleTable.style.display = 'none';
   peopleBody.innerHTML = '';
   downloadLink.style.display = 'none';
@@ -744,6 +795,10 @@ function renderPeoplePreview(people, sourceLabel) {
   parseMsg.innerHTML = `<div class="msg info">총 ${people.length}명 인식되었습니다${sourceLabel ? ` (${sourceLabel})` : ''}. 아래에서 인증서를 생성하세요.</div>`;
   genBtn.disabled = false;
 }
+
+chiefInput.addEventListener('input', () => {
+  if (lastRawPeople.length > 0) renderPeoplePreview(lastRawPeople, lastSourceLabel);
+});
 
 async function processFile(file) {
   fname.textContent = file.name;
@@ -773,8 +828,8 @@ async function processFile(file) {
 }
 
 // ---- 표에 직접 붙여넣기(엑셀 스타일 그리드) ----
-const GRID_COLS = 10;
-const GRID_FIELD_KEYS = ['major', 'minor', 'empId', 'name', 'certNo', 'issueDate', 'validUntil', 'dept', 'team', 'chief'];
+const GRID_COLS = 9;
+const GRID_FIELD_KEYS = ['major', 'minor', 'dept', 'team', 'empId', 'name', 'certNo', 'issueDate', 'validUntil'];
 
 function addGridRow() {
   const tr = document.createElement('tr');
@@ -796,16 +851,125 @@ function syncGridToPeople() {
   const people = [];
   for (const tr of pasteGridBody.rows) {
     const vals = Array.from(tr.cells).map(td => (td.textContent || '').trim());
-    const empId = vals[2];
+    const empId = vals[4];
     if (!empId || isPlaceholderCell(empId)) continue;
     const person = {};
     GRID_FIELD_KEYS.forEach((key, i) => { person[key] = vals[i] || ''; });
     if (isPlaceholderCell(person.major)) person.major = '';
     if (isPlaceholderCell(person.minor)) person.minor = '';
+    person.chief = '';
     people.push(person);
   }
   renderPeoplePreview(people, people.length ? '표 직접 입력' : '');
 }
+
+// ---- 셀 범위 선택 (드래그로 여러 칸 선택 후 복사/붙여넣기) ----
+let selAnchor = null; // {row, col}
+let selFocus = null;  // {row, col}
+let isSelecting = false;
+
+function cellPos(td) {
+  return { row: td.parentElement.sectionRowIndex, col: td.cellIndex };
+}
+
+function clearSelectionHighlight() {
+  pasteGridBody.querySelectorAll('td.cell-selected').forEach(td => td.classList.remove('cell-selected'));
+}
+
+function applySelectionHighlight() {
+  clearSelectionHighlight();
+  if (!selAnchor || !selFocus) return;
+  const r0 = Math.min(selAnchor.row, selFocus.row), r1 = Math.max(selAnchor.row, selFocus.row);
+  const c0 = Math.min(selAnchor.col, selFocus.col), c1 = Math.max(selAnchor.col, selFocus.col);
+  for (let r = r0; r <= r1; r++) {
+    const tr = pasteGridBody.rows[r];
+    if (!tr) continue;
+    for (let c = c0; c <= c1; c++) {
+      const td = tr.cells[c];
+      if (td) td.classList.add('cell-selected');
+    }
+  }
+}
+
+pasteGridBody.addEventListener('mousedown', (e) => {
+  const td = e.target.closest('td');
+  if (!td) return;
+  isSelecting = true;
+  selAnchor = cellPos(td);
+  selFocus = selAnchor;
+  applySelectionHighlight();
+});
+pasteGridBody.addEventListener('mouseover', (e) => {
+  if (!isSelecting) return;
+  const td = e.target.closest('td');
+  if (!td) return;
+  selFocus = cellPos(td);
+  applySelectionHighlight();
+});
+document.addEventListener('mouseup', () => { isSelecting = false; });
+
+pasteGridBody.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const td = e.target.closest('td');
+  if (!td) return;
+  e.preventDefault();
+
+  if (e.ctrlKey || e.metaKey) {
+    // Ctrl+Enter: 현재 칸의 값을 선택된 범위 전체에 일괄 적용 (엑셀과 동일)
+    const value = (td.textContent || '').trim();
+    if (selAnchor && selFocus) {
+      const r0 = Math.min(selAnchor.row, selFocus.row), r1 = Math.max(selAnchor.row, selFocus.row);
+      const c0 = Math.min(selAnchor.col, selFocus.col), c1 = Math.max(selAnchor.col, selFocus.col);
+      for (let r = r0; r <= r1; r++) {
+        const tr = pasteGridBody.rows[r];
+        if (!tr) continue;
+        for (let c = c0; c <= c1; c++) {
+          const cell = tr.cells[c];
+          if (cell) cell.textContent = value;
+        }
+      }
+    }
+    syncGridToPeople();
+    td.focus();
+    return;
+  }
+
+  // 일반 Enter: 같은 열의 다음 행으로 이동 (엑셀과 동일), 없으면 새 행 추가
+  const pos = cellPos(td);
+  let nextRow = pasteGridBody.rows[pos.row + 1];
+  if (!nextRow) nextRow = addGridRow();
+  const nextCell = nextRow.cells[pos.col];
+  if (nextCell) {
+    nextCell.focus();
+    const range = document.createRange();
+    range.selectNodeContents(nextCell);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    selAnchor = cellPos(nextCell);
+    selFocus = selAnchor;
+    applySelectionHighlight();
+  }
+  syncGridToPeople();
+});
+
+pasteGridBody.addEventListener('copy', (e) => {
+  if (!selAnchor || !selFocus) return;
+  const r0 = Math.min(selAnchor.row, selFocus.row), r1 = Math.max(selAnchor.row, selFocus.row);
+  const c0 = Math.min(selAnchor.col, selFocus.col), c1 = Math.max(selAnchor.col, selFocus.col);
+  const lines = [];
+  for (let r = r0; r <= r1; r++) {
+    const tr = pasteGridBody.rows[r];
+    if (!tr) continue;
+    const vals = [];
+    for (let c = c0; c <= c1; c++) {
+      vals.push(tr.cells[c] ? (tr.cells[c].textContent || '').trim() : '');
+    }
+    lines.push(vals.join('\t'));
+  }
+  e.clipboardData.setData('text/plain', lines.join('\n'));
+  e.preventDefault();
+});
 
 pasteGridBody.addEventListener('paste', (e) => {
   const active = document.activeElement;
@@ -837,6 +1001,7 @@ pasteGridBody.addEventListener('input', () => {
   clearTimeout(pasteGridBody._syncTimer);
   pasteGridBody._syncTimer = setTimeout(syncGridToPeople, 300);
 });
+
 
 genBtn.addEventListener('click', async () => {
   if (currentPeople.length === 0) return;
