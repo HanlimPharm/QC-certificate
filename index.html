@@ -106,6 +106,56 @@
     font-size: 12.5px;
   }
   .warn-cell { color: var(--bad); font-weight: 600; }
+  .or-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #8b95a1;
+    font-size: 12.5px;
+    margin: 18px 0;
+  }
+  .or-divider::before, .or-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--line);
+  }
+  .or-divider span { padding: 0 12px; }
+  .grid-wrap { margin-bottom: 4px; }
+  .grid-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  table.paste-grid {
+    border-collapse: collapse;
+    font-size: 13px;
+    width: 100%;
+    min-width: 920px;
+  }
+  table.paste-grid th {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 12px;
+    padding: 8px 10px;
+    text-align: left;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+  }
+  table.paste-grid td {
+    padding: 7px 10px;
+    border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line);
+    min-width: 90px;
+    white-space: nowrap;
+    outline: none;
+  }
+  table.paste-grid td:first-child { border-left: none; }
+  table.paste-grid td:focus {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
   .msg {
     font-size: 13.5px;
     padding: 12px 14px;
@@ -206,13 +256,32 @@
   <p class="sub">발행대장 엑셀 파일을 올리면, 등록된 인원 수만큼 인증서를 1인 1페이지씩 하나의 워드 파일로 만들어 드립니다. 서버에 업로드되지 않고 이 브라우저 안에서만 처리됩니다.</p>
 
   <div class="card upload-card" id="uploadCard">
-    <h2>1. 발행대장 엑셀 업로드</h2>
+    <h2>1. 인원 데이터 입력</h2>
     <label class="dropzone" id="dropzone">
       <input type="file" id="fileInput" accept=".xlsx" />
-      <div class="dz-label" id="dzLabel">클릭하거나 파일을 이 영역 어디에나 끌어다 놓으세요 (.xlsx)</div>
+      <div class="dz-label" id="dzLabel">클릭하거나 엑셀 파일을 이 영역 어디에나 끌어다 놓으세요 (.xlsx)</div>
       <div class="dz-hint">A대분류·B소분류·C사번·D이름·E인증번호·F발행일·G유효기간·H부서·I팀·J품질부서책임자 (2행 헤더, 3행부터 인원)</div>
       <div class="fname" id="fname"></div>
     </label>
+
+    <div class="or-divider"><span>또는</span></div>
+
+    <div class="grid-wrap">
+      <div class="dz-label" style="text-align:left; margin-bottom:6px;">엑셀에서 대분류~품질부서책임자 10개 열을 선택해 복사(Ctrl+C)한 뒤, 아래 표의 첫 칸을 클릭하고 붙여넣기(Ctrl+V)하세요</div>
+      <div class="grid-scroll">
+        <table class="paste-grid" id="pasteGrid">
+          <thead>
+            <tr>
+              <th>대분류</th><th>소분류</th><th>사번</th><th>이름</th><th>인증번호</th>
+              <th>발행일</th><th>유효기간</th><th>부서</th><th>팀</th><th>품질부서책임자</th>
+            </tr>
+          </thead>
+          <tbody id="pasteGridBody"></tbody>
+        </table>
+      </div>
+      <button class="btn-ghost" id="addRowBtn" style="margin-top:10px;">+ 행 추가</button>
+    </div>
+
     <div id="parseMsg"></div>
     <table class="people" id="peopleTable" style="display:none;">
       <thead>
@@ -498,6 +567,8 @@ const peopleBody = document.getElementById('peopleBody');
 const genBtn = document.getElementById('genBtn');
 const genMsg = document.getElementById('genMsg');
 const downloadLink = document.getElementById('downloadLink');
+const pasteGridBody = document.getElementById('pasteGridBody');
+const addRowBtn = document.getElementById('addRowBtn');
 const tplBadge = document.getElementById('tplBadge');
 const tplInfo = document.getElementById('tplInfo');
 const tplMsg = document.getElementById('tplMsg');
@@ -648,6 +719,32 @@ uploadCard.addEventListener('drop', (e) => {
   processFile(file);
 });
 
+function renderPeoplePreview(people, sourceLabel) {
+  peopleTable.style.display = 'none';
+  peopleBody.innerHTML = '';
+  downloadLink.style.display = 'none';
+  genBtn.disabled = true;
+  currentPeople = [];
+
+  if (people.length === 0) {
+    parseMsg.innerHTML = '';
+    return;
+  }
+
+  currentPeople = people;
+  peopleTable.style.display = 'table';
+  for (const p of people) {
+    const tr = document.createElement('tr');
+    const deptTeam = (p.dept || p.team) ? `${p.dept || '—'} / ${p.team || '—'}` : '';
+    const deptTeamCell = (p.dept || p.team) ? deptTeam : '<span class="warn-cell">미입력</span>';
+    const chiefCell = p.chief ? p.chief : '<span class="warn-cell">미입력</span>';
+    tr.innerHTML = `<td>${p.name || '—'}</td><td>${p.empId}</td><td>${p.major}-${p.minor}</td><td>${deptTeamCell}</td><td>${chiefCell}</td><td>${p.certNo || '<span class="warn-cell">미확인</span>'}</td>`;
+    peopleBody.appendChild(tr);
+  }
+  parseMsg.innerHTML = `<div class="msg info">총 ${people.length}명 인식되었습니다${sourceLabel ? ` (${sourceLabel})` : ''}. 아래에서 인증서를 생성하세요.</div>`;
+  genBtn.disabled = false;
+}
+
 async function processFile(file) {
   fname.textContent = file.name;
   dzLabel.textContent = '다른 파일 선택';
@@ -668,23 +765,78 @@ async function processFile(file) {
       return;
     }
 
-    currentPeople = people;
-    peopleTable.style.display = 'table';
-    for (const p of people) {
-      const tr = document.createElement('tr');
-      const deptTeam = (p.dept || p.team) ? `${p.dept || '—'} / ${p.team || '—'}` : '';
-      const deptTeamCell = (p.dept || p.team) ? deptTeam : '<span class="warn-cell">미입력</span>';
-      const chiefCell = p.chief ? p.chief : '<span class="warn-cell">미입력</span>';
-      tr.innerHTML = `<td>${p.name || '—'}</td><td>${p.empId}</td><td>${p.major}-${p.minor}</td><td>${deptTeamCell}</td><td>${chiefCell}</td><td>${p.certNo || '<span class="warn-cell">미확인</span>'}</td>`;
-      peopleBody.appendChild(tr);
-    }
-    parseMsg.innerHTML = `<div class="msg info">총 ${people.length}명 인식되었습니다. 아래에서 인증서를 생성하세요.</div>`;
-    genBtn.disabled = false;
+    renderPeoplePreview(people, '엑셀 업로드');
   } catch (err) {
     console.error(err);
     parseMsg.innerHTML = `<div class="msg error">엑셀을 읽는 중 오류가 발생했습니다: ${err.message}</div>`;
   }
 }
+
+// ---- 표에 직접 붙여넣기(엑셀 스타일 그리드) ----
+const GRID_COLS = 10;
+const GRID_FIELD_KEYS = ['major', 'minor', 'empId', 'name', 'certNo', 'issueDate', 'validUntil', 'dept', 'team', 'chief'];
+
+function addGridRow() {
+  const tr = document.createElement('tr');
+  for (let i = 0; i < GRID_COLS; i++) {
+    const td = document.createElement('td');
+    td.contentEditable = 'true';
+    tr.appendChild(td);
+  }
+  pasteGridBody.appendChild(tr);
+  return tr;
+}
+for (let i = 0; i < 3; i++) addGridRow();
+
+addRowBtn.addEventListener('click', () => addGridRow());
+
+function isPlaceholderCell(v) { return isPlaceholder(v); }
+
+function syncGridToPeople() {
+  const people = [];
+  for (const tr of pasteGridBody.rows) {
+    const vals = Array.from(tr.cells).map(td => (td.textContent || '').trim());
+    const empId = vals[2];
+    if (!empId || isPlaceholderCell(empId)) continue;
+    const person = {};
+    GRID_FIELD_KEYS.forEach((key, i) => { person[key] = vals[i] || ''; });
+    if (isPlaceholderCell(person.major)) person.major = '';
+    if (isPlaceholderCell(person.minor)) person.minor = '';
+    people.push(person);
+  }
+  renderPeoplePreview(people, people.length ? '표 직접 입력' : '');
+}
+
+pasteGridBody.addEventListener('paste', (e) => {
+  const active = document.activeElement;
+  if (!active || active.tagName !== 'TD' || !pasteGridBody.contains(active)) return;
+  e.preventDefault();
+
+  const startRow = active.parentElement.sectionRowIndex; // tbody 내부 상대 행 인덱스
+  const startCol = active.cellIndex;
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  let rows = text.replace(/\r/g, '').split('\n');
+  if (rows.length > 1 && rows[rows.length - 1] === '') rows.pop(); // 복사 시 붙는 마지막 빈 줄 제거
+
+  rows.forEach((rowText, rOffset) => {
+    const cols = rowText.split('\t');
+    const rowIndex = startRow + rOffset;
+    let tr = pasteGridBody.rows[rowIndex];
+    if (!tr) tr = addGridRow();
+    cols.forEach((val, cOffset) => {
+      const colIndex = startCol + cOffset;
+      if (colIndex >= GRID_COLS) return;
+      const td = tr.cells[colIndex];
+      if (td) td.textContent = val.trim();
+    });
+  });
+  syncGridToPeople();
+});
+
+pasteGridBody.addEventListener('input', () => {
+  clearTimeout(pasteGridBody._syncTimer);
+  pasteGridBody._syncTimer = setTimeout(syncGridToPeople, 300);
+});
 
 genBtn.addEventListener('click', async () => {
   if (currentPeople.length === 0) return;
