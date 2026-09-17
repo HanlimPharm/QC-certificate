@@ -296,7 +296,7 @@
     <div class="or-divider"><span>또는</span></div>
 
     <div class="grid-wrap">
-      <div class="dz-label" style="text-align:left; margin-bottom:6px;">엑셀에서 아래와 같은 순서로 9개 열을 선택해 복사(Ctrl+C)한 뒤, 표의 칸을 클릭하고 붙여넣기(Ctrl+V)하세요. 칸을 드래그해서 여러 칸을 한 번에 복사·붙여넣기 할 수 있고, 범위를 선택한 뒤 값을 입력하고 <b>Ctrl+Enter</b>를 누르면 선택한 칸 전체에 같은 값이 채워집니다. <b>Enter</b>는 같은 열의 다음 행으로 이동합니다.</div>
+      <div class="dz-label" style="text-align:left; margin-bottom:6px;">엑셀에서 아래와 같은 순서로 9개 열을 선택해 복사(Ctrl+C)한 뒤, 표의 칸을 클릭하고 붙여넣기(Ctrl+V)하세요. 칸을 드래그해서 여러 칸을 한 번에 복사·붙여넣기·삭제(Delete)할 수 있고, 범위를 선택한 뒤 값을 입력하고 <b>Ctrl+Enter</b>를 누르면 선택한 칸 전체에 같은 값이 채워집니다. <b>Enter</b>는 같은 열의 다음 행으로 이동합니다.</div>
       <div class="grid-scroll">
         <table class="paste-grid" id="pasteGrid">
           <colgroup>
@@ -909,9 +909,27 @@ pasteGridBody.addEventListener('mouseover', (e) => {
 document.addEventListener('mouseup', () => { isSelecting = false; });
 
 pasteGridBody.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
   const td = e.target.closest('td');
   if (!td) return;
+
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (!selAnchor || !selFocus) return; // 추적된 선택이 없으면 기본 동작(글자 삭제) 유지
+    e.preventDefault();
+    const r0 = Math.min(selAnchor.row, selFocus.row), r1 = Math.max(selAnchor.row, selFocus.row);
+    const c0 = Math.min(selAnchor.col, selFocus.col), c1 = Math.max(selAnchor.col, selFocus.col);
+    for (let r = r0; r <= r1; r++) {
+      const tr = pasteGridBody.rows[r];
+      if (!tr) continue;
+      for (let c = c0; c <= c1; c++) {
+        const cell = tr.cells[c];
+        if (cell) cell.textContent = '';
+      }
+    }
+    syncGridToPeople();
+    return;
+  }
+
+  if (e.key !== 'Enter') return;
   e.preventDefault();
 
   if (e.ctrlKey || e.metaKey) {
