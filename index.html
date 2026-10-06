@@ -177,6 +177,9 @@
     outline: none;
   }
   table.paste-grid td:first-child { border-left: none; }
+  /* 인증분야~팀(1~4열): 나머지 열과 다른 색 */
+  table.paste-grid td:nth-child(-n+4) { background: #fff7e0; }
+  table.paste-grid th:nth-child(-n+4) { background: #ffe9ad; color: #8a5a00; }
   table.paste-grid td:focus {
     background: var(--accent-soft);
     box-shadow: inset 0 0 0 1.5px var(--accent);
@@ -1032,6 +1035,8 @@ function addGridRow() {
   for (let i = 0; i < otherCount; i++) {
     const td = document.createElement('td');
     td.contentEditable = 'true';
+    if (i === 0) td.textContent = '품질관리부'; // 부서 기본값
+    if (i === 1) td.textContent = 'QC팀';       // 팀 기본값
     if (i === otherCount - 1) td.textContent = 'N/A'; // 유효기간 기본값
     tr.appendChild(td);
   }
